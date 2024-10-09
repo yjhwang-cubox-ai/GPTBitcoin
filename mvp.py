@@ -1,4 +1,5 @@
 import os
+import json
 from dotenv import load_dotenv
 import pyupbit
 from openai import OpenAI
@@ -61,4 +62,20 @@ response = client.chat.completions.create(
   }
 )
 
-print(response.choices[0].message.content)
+result = response.choices[0].message.content
+
+# 3. AI의 판단에 따라 실제로 자동매매 진행하기
+access = os.getenv('UPBIT_ACCESS_KEY')
+secret = os.getenv('UPBIT_SECRET_KEY')
+upbit = pyupbit.Upbit(access, secret)
+
+rerult = json.loads(result)
+
+if result['decision'] == 'buy':
+    print(upbit.buy_market_order("KRW-BTC", upbit.get_balance("KRW") * 0.9))
+    print(result['reason'])
+elif result['decision'] == 'sell':
+    print(upbit.sell_market_order("KRW-BTC", upbit.get_balance("KRW-XRP")))
+    print(result['reason'])
+elif result['decision'] == 'hold':
+    print(result['reason'])
