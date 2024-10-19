@@ -1,16 +1,18 @@
 import os
 import json
 import time
+import requests
 from dotenv import load_dotenv
 import pyupbit
-from openai import OpenAI
 from ta.volatility import BollingerBands
-from ta.momentum import RSIIndicator, StochasticOscillator
+from ta.momentum import RSIIndicator
 from ta.trend import MACD
+from openai import OpenAI
 
+# Load environment variables
 load_dotenv()
 
-# 일봉 데이터에 보조 지표 추가
+# Add technical indicators to OHLCV data
 def add_indicators(df):
     # Bollinger Bands
     indicator_bb = BollingerBands(close=df["close"], window=20, window_dev=2)
@@ -30,76 +32,135 @@ def add_indicators(df):
 
     return df
 
-def ai_traiding():
-    # 1. 업비트 차트 데이터 가져오기 (30일 일봉)
-    daily_df = pyupbit.get_ohlcv("KRW-BTC", count=30, interval="day")
-    # 일봉 데이터에 지표 추가
-    daily_df = add_indicators(daily_df)
-    # 24시간 시간 봉 데이터 가져오기
-    hourly_df = pyupbit.get_ohlcv("KRW-BTC", count=24, interval="minute60")
-    
-    # 2. 오더북 데이터 가져오기
-    orderbook = pyupbit.get_orderbook("KRW-BTC")
-    
-    # 3. 투자 상태 조회하기 (잔고 데이터)
-    access = os.getenv('UPBIT_ACCESS_KEY')
-    secret = os.getenv('UPBIT_SECRET_KEY')
-    upbit = pyupbit.Upbit(access, secret)
-    
-    krw_balance = upbit.get_balance("KRW")
-    btc_balance = upbit.get_balance("KRW-BTC")
-    
-    # AI에 데이터 전달하여 매매 판단 받기
-    client = OpenAI()
-    
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You're a Bitcoin investing expert.\nBased on the provided data, including daily and hourly chart data, order book data, "
-                    "and investment status, determine whether to buy, sell, or hold.\nResponse in json format\n\n"
-                    "Response Example:\n{\"decision\":\"buy\",\"reason\":\"some technical reason\"}\n{\"decision\":\"sell\",\"reason\":\"some technical reason\"}\n{\"decision\":\"hold\",\"reason\":\"some technical reason\"}"
-                )
-            },
-            {"role": "user", "content": json.dumps({
-                "daily_chart": daily_df.to_dict(),
-                "hourly_chart": hourly_df.to_dict(),
-                "orderbook": orderbook,
-                "investment_status": {
-                    "krw_balance": krw_balance,
-                    "btc_balance": btc_balance
-                }
-            })}
-        ]
-    )
-    
-    result = response.choices[0].message.content
-    decision_data = json.loads(result)
-    
-    print(f"### AI Decision: {decision_data['decision'].upper()} ###")
-    print(f"### Reason: {decision_data['reason']} ###")
-    
-    # 매매 판단에 따라 실제 매매 진행
-    if decision_data['decision'] == 'buy':
-        if krw_balance * 0.9995 > 5000:
-            print("### Buy Order Executed ###")
-            print(upbit.buy_market_order("KRW-BTC", krw_balance * 0.9995))
+# Fetch Fear and Greed Index from API
+def get_fear_and_greed_index():
+    try:
+        response = requests.get("https://api.alternative.me/fng/?limit=1")
+        if response.status_code == 200:
+            fng_data = response.json()
+            # Extract relevant data
+            fng_value = fng_data['data'][0]['value']
+            fng_classification = fng_data['data'][0]['value_classification']
+            return {
+                "fng_value": fng_value,
+                "fng_classification": fng_classification
+            }
         else:
-            print("### Buy Order Failed: Insufficient KRW ###")
-    elif decision_data['decision'] == 'sell':
-        current_price = pyupbit.get_current_price("KRW-BTC")
-        if btc_balance * current_price > 5000:
-            print("### Sell Order Executed ###")
-            print(upbit.sell_market_order("KRW-BTC", btc_balance))
-        else:
-            print("### Sell Order Failed: Insufficient BTC ###")
-    elif decision_data['decision'] == 'hold':
-        print("### Hold ###")
-    
-while True:
-    time.sleep(600)
-    ai_traiding()
+            print("Error fetching Fear and Greed Index")
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"Error occurred while fetching Fear and Greed Index: {e}")
+        return None
 
-ai_traiding()
+def ai_trading():
+    try:
+        # 1. Fetch chart data
+        print("Fetching daily and hourly chart data...")
+        daily_df = pyupbit.get_ohlcv("KRW-BTC", count=30, interval="day")
+        hourly_df = pyupbit.get_ohlcv("KRW-BTC", count=24, interval="minute60")
+        
+        if daily_df is None or hourly_df is None:
+            print("Failed to fetch chart data.")
+            return
+
+        # Add technical indicators
+        daily_df = add_indicators(daily_df)
+        hourly_df = add_indicators(hourly_df)
+
+        # 2. Fetch orderbook data
+        print("Fetching orderbook data...")
+        orderbook = pyupbit.get_orderbook("KRW-BTC")
+        if orderbook is None:
+            print("Failed to fetch orderbook data.")
+            return
+
+        # 3. Fetch balance and investment status
+        access = os.getenv('UPBIT_ACCESS_KEY')
+        secret = os.getenv('UPBIT_SECRET_KEY')
+        if not access or not secret:
+            print("Upbit API keys not found. Check your .env file.")
+            return
+
+        upbit = pyupbit.Upbit(access, secret)
+
+        krw_balance = upbit.get_balance("KRW")
+        btc_balance = upbit.get_balance("KRW-BTC")
+
+        if krw_balance is None or btc_balance is None:
+            print("Failed to fetch balance data.")
+            return
+
+        # 4. Fetch Fear and Greed Index
+        print("Fetching Fear and Greed Index data...")
+        fng_data = get_fear_and_greed_index()
+        if fng_data is None:
+            print("Failed to fetch Fear and Greed Index data.")
+            return
+
+        # 5. Get AI decision on trading
+        client = OpenAI()
+        print("Requesting AI decision...")
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You're a Bitcoin investing expert. Based on the provided data, including daily and hourly chart data, order book data, "
+                        "investment status, and Fear and Greed Index, determine whether to buy, sell, or hold. "
+                        "Response in json format.\n\n"
+                        "Example response:\n{\"decision\":\"buy\",\"reason\":\"some technical reason\"}\n"
+                        "{\"decision\":\"sell\",\"reason\":\"some technical reason\"}\n{\"decision\":\"hold\",\"reason\":\"some technical reason\"}"
+                    )
+                },
+                {"role": "user", "content": json.dumps({
+                    "daily_chart": daily_df.to_dict(),
+                    "hourly_chart": hourly_df.to_dict(),
+                    "orderbook": orderbook,
+                    "investment_status": {
+                        "krw_balance": krw_balance,
+                        "btc_balance": btc_balance
+                    },
+                    "fear_and_greed_index": fng_data
+                })}
+            ]
+        )
+
+        result = response.choices[0].message['content']
+        decision_data = json.loads(result)
+        
+        if 'decision' not in decision_data or 'reason' not in decision_data:
+            print("AI response format is incorrect.")
+            return
+
+        print(f"### AI Decision: {decision_data['decision'].upper()} ###")
+        print(f"### Reason: {decision_data['reason']} ###")
+
+        # 6. Execute trade based on AI decision
+        if decision_data['decision'] == 'buy':
+            if krw_balance * 0.9995 > 5000:
+                print("### Executing Buy Order ###")
+                print(upbit.buy_market_order("KRW-BTC", krw_balance * 0.9995))
+            else:
+                print("### Buy Order Failed: Insufficient KRW ###")
+        elif decision_data['decision'] == 'sell':
+            current_price = pyupbit.get_current_price("KRW-BTC")
+            if btc_balance * current_price > 5000:
+                print("### Executing Sell Order ###")
+                print(upbit.sell_market_order("KRW-BTC", btc_balance))
+            else:
+                print("### Sell Order Failed: Insufficient BTC ###")
+        elif decision_data['decision'] == 'hold':
+            print("### Hold ###")
+
+    except requests.exceptions.RequestException as e:
+        print(f"Network error occurred: {e}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+# Main loop
+while True:
+    ai_trading()
+    print("Waiting for next round...")
+    time.sleep(600)
