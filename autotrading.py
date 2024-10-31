@@ -8,6 +8,12 @@ import ta
 from ta.utils import dropna
 import time
 import requests
+import base64
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
 
 load_dotenv()
 
@@ -70,94 +76,148 @@ def get_bitcoin_news():
         print(f"Error fetching news: {e}")
         return []
 
+def capture_chart():
+    chrome_options = Options()
+    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('--start-maximized')
+    chrome_options.add_argument('--window-size=1920,1080')
+    
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    
+    try:
+        driver.get('https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC')
+        time.sleep(10)
+        
+        # 1시간 차트 설정
+        time_menu = driver.find_element(By.XPATH, '/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]')
+        time_menu.click()
+        time.sleep(1)
+        one_hour_option = driver.find_element(By.XPATH, '/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]/cq-menu-dropdown/cq-item[8]')
+        one_hour_option.click()
+        time.sleep(2)
+
+        # 지표 추가
+        indicators = driver.find_element(By.XPATH, '/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]')
+        indicators.click()
+        time.sleep(2)
+        bollinger_band = driver.find_element(By.XPATH, '/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]/cq-menu-dropdown/cq-scroll/cq-studies/cq-studies-content/cq-item[15]')
+        bollinger_band.click()
+        time.sleep(2)
+
+        # 스크린샷 캡처 및 base64 인코딩
+        screenshot = driver.get_screenshot_as_base64()
+        return screenshot
+        
+    except Exception as e:
+        print(f'차트 캡처 중 에러 발생: {str(e)}')
+        return None
+    finally:
+        driver.quit()
+
 def ai_trading():
     # Upbit 객체 생성
     access = os.getenv("UPBIT_ACCESS_KEY")
     secret = os.getenv("UPBIT_SECRET_KEY")
     upbit = pyupbit.Upbit(access, secret)
 
-    # 1. 현재 투자 상태 조회
-    all_balances = upbit.get_balances()
-    filtered_balances = [balance for balance in all_balances if balance['currency'] in ['BTC', 'KRW']]
-    
-    # 2. 오더북(호가 데이터) 조회
-    orderbook = pyupbit.get_orderbook("KRW-BTC")
-    
-    # 3. 차트 데이터 조회 및 보조지표 추가
-    df_daily = pyupbit.get_ohlcv("KRW-BTC", interval="day", count=30)
-    df_daily = dropna(df_daily)
-    df_daily = add_indicators(df_daily)
-    
-    df_hourly = pyupbit.get_ohlcv("KRW-BTC", interval="minute60", count=24)
-    df_hourly = dropna(df_hourly)
-    df_hourly = add_indicators(df_hourly)
-
-    # 4. 공포 탐욕 지수 가져오기
-    fear_greed_index = get_fear_and_greed_index()
-
-    # 5. 뉴스 헤드라인 가져오기
-    news_headlines = get_bitcoin_news()
-
-    # AI에게 데이터 제공하고 판단 받기
-    client = OpenAI()
-
-    response = client.chat.completions.create(
-    model="gpt-4",
-    messages=[
-        {
-        "role": "system",
-        "content": """You are an expert in Bitcoin investing. Analyze the provided data including technical indicators, market data, recent news headlines, and the Fear and Greed Index. Tell me whether to buy, sell, or hold at the moment. Consider the following in your analysis:
-        - Technical indicators and market data
-        - Recent news headlines and their potential impact on Bitcoin price
-        - The Fear and Greed Index and its implications
-        - Overall market sentiment
+    try:
+        # 1. 현재 투자 상태 조회
+        all_balances = upbit.get_balances()
+        filtered_balances = [balance for balance in all_balances if balance['currency'] in ['BTC', 'KRW']]
+        # 2. 오더북(호가 데이터) 조회
+        orderbook = pyupbit.get_orderbook("KRW-BTC")
         
-        Response in json format.
+        # 3. 차트 데이터 조회 및 보조지표 추가
+        df_daily = pyupbit.get_ohlcv("KRW-BTC", interval="day", count=30)
+        df_daily = dropna(df_daily)
+        df_daily = add_indicators(df_daily)
+        
+        df_hourly = pyupbit.get_ohlcv("KRW-BTC", interval="minute60", count=24)
+        df_hourly = dropna(df_hourly)
+        df_hourly = add_indicators(df_hourly)
 
-        Response Example:
-        {"decision": "buy", "reason": "some technical, fundamental, and sentiment-based reason"}
-        {"decision": "sell", "reason": "some technical, fundamental, and sentiment-based reason"}
-        {"decision": "hold", "reason": "some technical, fundamental, and sentiment-based reason"}"""
-        },
-        {
-        "role": "user",
-        "content": f"""Current investment status: {json.dumps(filtered_balances)}
+        # 4. 공포 탐욕 지수 가져오기
+        fear_greed_index = get_fear_and_greed_index()
+        # 5. 뉴스 헤드라인 가져오기
+        news_headlines = get_bitcoin_news()
+
+        # 차트 이미지 캡처
+        chart_image = capture_chart()
+
+        # OpenAI API 호출
+        client = OpenAI()
+        
+        messages = [
+            {
+                "role": "system",
+                "content": """You are an expert in Bitcoin investing. Analyze all provided data including technical indicators, market data, recent news headlines, the Fear and Greed Index, and the technical chart image. Provide a comprehensive analysis and trading decision. Consider:
+                - Technical indicators and market data
+                - Chart patterns and visual analysis
+                - Recent news headlines and their potential impact
+                - The Fear and Greed Index
+                - Overall market sentiment
+                
+                Response in json format with detailed analysis.
+                {"decision": "buy/sell/hold", "reason": "detailed analysis including chart patterns", "confidence_score": "0-100"}"""
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"""Current investment status: {json.dumps(filtered_balances)}
                         Orderbook: {json.dumps(orderbook)}
                         Daily OHLCV with indicators (30 days): {df_daily.to_json()}
                         Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
                         Recent news headlines: {json.dumps(news_headlines)}
                         Fear and Greed Index: {json.dumps(fear_greed_index)}"""
-        }
-    ],
-    response_format={
-        "type": "json_object"
-    }
-    )
-    result = response.choices[0].message.content
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{chart_image}"
+                        }
+                    }
+                ]
+            }
+        ]
 
-    # AI의 판단에 따라 실제로 자동매매 진행하기
-    result = json.loads(result)
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=1000,
+            response_format={"type": "json_object"}
+        )
 
-    print("### AI Decision: ", result["decision"].upper(), "###")
-    print(f"### Reason: {result['reason']} ###")
+        result = json.loads(response.choices[0].message.content)
+        
+        print("### AI Decision: ", result["decision"].upper(), "###")
+        print(f"### Reason: {result['reason']} ###")
+        print(f"### Confidence Score: {result['confidence_score']} ###")
 
-    if result["decision"] == "buy":
-        my_krw = upbit.get_balance("KRW")
-        if my_krw*0.9995 > 5000:
-            print("### Buy Order Executed ###")
-            print(upbit.buy_market_order("KRW-BTC", my_krw * 0.9995))
+        # 신뢰도 점수가 70 이상일 때만 매매 실행
+        if float(result['confidence_score']) >= 70:
+            if result["decision"] == "buy":
+                my_krw = upbit.get_balance("KRW")
+                if my_krw*0.9995 > 5000:
+                    print("### Buy Order Executed ###")
+                    print(upbit.buy_market_order("KRW-BTC", my_krw * 0.9995))
+                else:
+                    print("### Buy Order Failed: Insufficient KRW ###")
+            elif result["decision"] == "sell":
+                my_btc = upbit.get_balance("KRW-BTC")
+                current_price = pyupbit.get_orderbook(ticker="KRW-BTC")['orderbook_units'][0]["ask_price"]
+                if my_btc*current_price > 5000:
+                    print("### Sell Order Executed ###")
+                    print(upbit.sell_market_order("KRW-BTC", my_btc))
+                else:
+                    print("### Sell Order Failed: Insufficient BTC ###")
         else:
-            print("### Buy Order Failed: Insufficient KRW (less than 5000 KRW) ###")
-    elif result["decision"] == "sell":
-        my_btc = upbit.get_balance("KRW-BTC")
-        current_price = pyupbit.get_orderbook(ticker="KRW-BTC")['orderbook_units'][0]["ask_price"]
-        if my_btc*current_price > 5000:
-            print("### Sell Order Executed ###")
-            print(upbit.sell_market_order("KRW-BTC", my_btc))
-        else:
-            print("### Sell Order Failed: Insufficient BTC (less than 5000 KRW worth) ###")
-    elif result["decision"] == "hold":
-        print("### Hold Position ###")
+            print(f"### Trading Skipped: Low Confidence Score ({result['confidence_score']}) ###")
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 # Main loop
 while True:

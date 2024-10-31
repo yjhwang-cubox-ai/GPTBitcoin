@@ -10,6 +10,13 @@
             "request": "launch",
             "program": "autotrading.py",
             "console": "integratedTerminal"
+        },
+        {
+            "name": "test",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "test.py",
+            "console": "integratedTerminal"
         }
     ]
 }
