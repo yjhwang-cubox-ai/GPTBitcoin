@@ -12,6 +12,13 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "gpt-test",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "gpt-test.py",
+            "console": "integratedTerminal"
+        }        ,
+        {
             "name": "test",
             "type": "debugpy",
             "request": "launch",
