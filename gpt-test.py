@@ -3,20 +3,26 @@ from dotenv import load_dotenv
 import pyupbit
 import pandas as pd
 import json
-from openai import OpenAI
+from openai import OpenAI, OpenAIError, RateLimitError, APIError, BadRequestError
 import ta
 from ta.utils import dropna
 import time
 import requests
-import base64
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 from youtube_transcript_api import YouTubeTranscriptApi
+from pydantic import BaseModel
+from typing import List
 
 load_dotenv()
+
+class TradingAnalysis(BaseModel):
+    decision: str  # "buy", "sell", "hold" 중 하나
+    reason: str
+    confidence_score: int  # 0-100
 
 def add_indicators(df):
     # 볼린저 밴드
@@ -217,19 +223,127 @@ def ai_trading():
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=messages,
-            max_tokens=1000,
-            response_format={"type": "json_object"}
+            max_tokens=4095,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "trading_analysis",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "analysis_steps": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "indicator": {
+                                            "type": "string"
+                                        },
+                                        "analysis": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": ["indicator", "analysis"],
+                                    "additionalProperties": False
+                                }
+                            },
+                            "market_analysis": {
+                                "type": "object",
+                                "properties": {
+                                    "news_sentiment": {
+                                        "type": "string"
+                                    },
+                                    "fear_greed": {
+                                        "type": "string"
+                                    },
+                                    "youtube_insights": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": ["news_sentiment", "fear_greed", "youtube_insights"],
+                                "additionalProperties": False
+                            },
+                            "technical_analysis": {
+                                "type": "object",
+                                "properties": {
+                                    "trend": {
+                                        "type": "string"
+                                    },
+                                    "support_level": {
+                                        "type": "string"
+                                    },
+                                    "resistance_level": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": ["trend", "support_level", "resistance_level"],
+                                "additionalProperties": False
+                            },
+                            "final_decision": {
+                                "type": "object",
+                                "properties": {
+                                    "action": {
+                                        "type": "string"
+                                    },
+                                    "reasoning": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": ["action", "reasoning"],
+                                "additionalProperties": False
+                            }
+                        },
+                        "required": [
+                            "analysis_steps",
+                            "market_analysis",
+                            "technical_analysis",
+                            "final_decision"
+                        ],
+                        "additionalProperties": False
+                    }
+                }
+            }
         )
 
         result = json.loads(response.choices[0].message.content)
         print(result)
+
+
+        print("\n=== AI 트레이딩 분석 결과 ===")
+        print("\n[분석 단계]")
+        for step in result['analysis_steps']:
+            print(f"\n{step['indicator']}:")
+            print(f"분석: {step['analysis']}")
+            
+        print("\n[시장 분석]")
+        market = result['market_analysis']
+        print(f"뉴스 심리: {market['news_sentiment']}")
+        print(f"공포탐욕지수: {market['fear_greed']}")
+        print(f"유튜브 분석: {market['youtube_insights']}")
         
-        print("### AI Decision: ", result["decision"].upper(), "###")
-        print(f"### Reason: {result['reason']} ###")
-        print(f"### Confidence Score: {result['confidence_score']} ###")
+        print("\n[기술적 분석]")
+        tech = result['technical_analysis']
+        print(f"트렌드: {tech['trend']}")
+        print(f"지지선: {tech['support_level']}")
+        print(f"저항선: {tech['resistance_level']}")
+        
+        print("\n[최종 결정]")
+        decision = result['final_decision']
+        print(f"행동: {decision['action'].upper()}")
+        print(f"근거: {decision['reasoning']}")
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"에러 발생: {e}")
+        if isinstance(e, RateLimitError):
+            print("API 호출 한도 초과. 잠시 후 다시 시도하세요.")
+        elif isinstance(e, APIError):
+            print("OpenAI API 오류. 다시 시도하세요.")
+        elif isinstance(e, BadRequestError):
+            print("잘못된 요청입니다. API 파라미터를 확인하세요.")
+        elif isinstance(e, OpenAIError):
+            print("OpenAI 관련 기타 오류가 발생했습니다.")
+        raise
 
 if __name__ == "__main__":
     ai_trading()
