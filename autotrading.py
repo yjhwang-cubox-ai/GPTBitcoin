@@ -14,6 +14,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
+from youtube_transcript_api import YouTubeTranscriptApi
 
 load_dotenv()
 
@@ -105,6 +106,8 @@ def capture_chart():
         bollinger_band.click()
         time.sleep(2)
 
+        driver.save_screenshot("upbit_chart.png")
+        print("차트가 성공적으로 캡처되었습니다.")
         # 스크린샷 캡처 및 base64 인코딩
         screenshot = driver.get_screenshot_as_base64()
         return screenshot
@@ -114,6 +117,29 @@ def capture_chart():
         return None
     finally:
         driver.quit()
+
+def get_youtube_insights():
+    """비트코인 관련 주요 유튜브 채널의 최신 분석 내용을 가져옴"""
+    # 주요 비트코인 분석 영상 ID 리스트
+    video_ids = [
+        "pCmJ8wsAS_w",  # 예시 영상 ID
+        # 여기에 더 많은 신뢰할 수 있는 비트코인 분석 채널의 최신 영상 ID 추가
+    ]
+    
+    combined_insights = []
+    for video_id in video_ids:
+        try:
+            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            text = ' '.join([content['text'] for content in transcript])
+            combined_insights.append({
+                'video_id': video_id,
+                'content': text
+            })
+        except Exception as e:
+            print(f"유튜브 자막 추출 중 에러 발생: {e}")
+            continue
+    
+    return combined_insights
 
 def ai_trading():
     # Upbit 객체 생성
@@ -145,21 +171,25 @@ def ai_trading():
         # 차트 이미지 캡처
         chart_image = capture_chart()
 
+        # 유튜브 인사이트 추가
+        youtube_insights = get_youtube_insights()
+
         # OpenAI API 호출
         client = OpenAI()
         
         messages = [
             {
                 "role": "system",
-                "content": """You are an expert in Bitcoin investing. Analyze all provided data including technical indicators, market data, recent news headlines, the Fear and Greed Index, and the technical chart image. Provide a comprehensive analysis and trading decision. Consider:
+                "content": """You are an expert in Bitcoin investing. Analyze all provided data including technical indicators, market data, recent news headlines, YouTube analysis content, the Fear and Greed Index, and the technical chart image. Provide a comprehensive analysis and trading decision. Consider:
                 - Technical indicators and market data
                 - Chart patterns and visual analysis
                 - Recent news headlines and their potential impact
+                - YouTube experts' analysis and insights
                 - The Fear and Greed Index
                 - Overall market sentiment
                 
                 Response in json format with detailed analysis.
-                {"decision": "buy/sell/hold", "reason": "detailed analysis including chart patterns", "confidence_score": "0-100"}"""
+                {"decision": "buy/sell/hold", "reason": "detailed analysis including chart patterns and YouTube insights", "confidence_score": "0-100"}"""
             },
             {
                 "role": "user",
@@ -171,7 +201,8 @@ def ai_trading():
                         Daily OHLCV with indicators (30 days): {df_daily.to_json()}
                         Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
                         Recent news headlines: {json.dumps(news_headlines)}
-                        Fear and Greed Index: {json.dumps(fear_greed_index)}"""
+                        Fear and Greed Index: {json.dumps(fear_greed_index)}
+                        YouTube Analysis Insights: {json.dumps(youtube_insights)}"""
                     },
                     {
                         "type": "image_url",
