@@ -270,7 +270,7 @@ def ai_trading():
         messages=[
             {
                 "role": "system",
-                "content": """You are a Bitcoin investment expert. Analyze the current market situation based on the following legendary Korean investor's trading strategy as your foundational approach:
+                "content": f"""You are a Bitcoin investment expert. Analyze the current market situation based on the following legendary Korean investor's trading strategy as your foundational approach:
 
 [Core Trading Principles]
 {youtube_transcript}
