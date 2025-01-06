@@ -375,11 +375,265 @@ def get_current_status(upbit, ticker):
         return None
 
 
+def init_reflection_database():
+    """리플렉션(반성) 데이터베이스 테이블 생성"""
+    db_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "trading_history.db"
+    )
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # 거래 리플렉션 테이블
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trade_reflections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            period_start TEXT NOT NULL,
+            period_end TEXT NOT NULL,
+            total_trades INTEGER NOT NULL,
+            profit_loss_percentage REAL NOT NULL,
+            market_condition TEXT NOT NULL,
+            strategy_effectiveness TEXT NOT NULL,
+            key_learnings TEXT NOT NULL,
+            improvement_suggestions TEXT NOT NULL
+        )
+    """
+    )
+
+    # actual_profit_loss 컬럼이 존재하는지 확인
+    cursor.execute("PRAGMA table_info(trades)")
+    columns = cursor.fetchall()
+    column_names = [column[1] for column in columns]
+
+    # actual_profit_loss 컬럼이 없을 때만 추가
+    if "actual_profit_loss" not in column_names:
+        cursor.execute(
+            """
+            ALTER TABLE trades 
+            ADD COLUMN actual_profit_loss REAL DEFAULT 0.0
+            """
+        )
+
+    conn.commit()
+    conn.close()
+
+
+def calculate_trade_performance(trade_history):
+    """거래 실적 계산"""
+    if not trade_history:
+        return 0, 0
+
+    total_profit_loss = 0
+    for trade in trade_history:
+        initial_value = (
+            trade["krw_balance"] + trade["btc_balance"] * trade["btc_krw_price"]
+        )
+        final_value = (
+            trade["krw_balance"] + trade["btc_balance"] * trade["btc_krw_price"]
+        )
+        profit_loss = ((final_value - initial_value) / initial_value) * 100
+        total_profit_loss += profit_loss
+
+    avg_profit_loss = total_profit_loss / len(trade_history)
+    return avg_profit_loss, len(trade_history)
+
+
+def analyze_market_condition(df_daily):
+    """시장 상황 분석"""
+    latest_data = df_daily.iloc[-1]
+
+    # 트렌드 분석
+    sma_20 = latest_data["sma_20"]
+    current_price = latest_data["close"]
+    rsi = latest_data["rsi"]
+
+    if current_price > sma_20 and rsi > 50:
+        trend = "상승"
+    elif current_price < sma_20 and rsi < 50:
+        trend = "하락"
+    else:
+        trend = "횡보"
+
+    # 변동성 분석
+    volatility = df_daily["close"].pct_change().std() * 100
+
+    return {"trend": trend, "volatility": volatility, "rsi": rsi}
+
+
+def generate_reflection(client, trade_history, market_condition):
+    """AI를 활용한 거래 반성 및 개선점 도출"""
+    avg_profit_loss, total_trades = calculate_trade_performance(trade_history)
+
+    prompt = {
+        "trading_metrics": {
+            "total_trades": total_trades,
+            "avg_profit_loss": round(avg_profit_loss, 2),
+            "market_trend": market_condition["trend"],
+            "volatility": round(market_condition["volatility"], 2),
+            "rsi": round(market_condition["rsi"], 2),
+            "trade_history": trade_history,
+        }
+    }
+
+    response = client.chat.completions.create(
+        model="gpt-4o-2024-08-06",
+        messages=[
+            {
+                "role": "system",
+                "content": "당신은 전문적인 트레이딩 코치입니다. 거래 기록을 분석하여 객관적인 평가와 구체적인 개선방안을 제시해야 합니다.",
+            },
+            {
+                "role": "user",
+                "content": json.dumps(prompt, ensure_ascii=False, indent=2),
+            },
+        ],
+        response_format={"type": "json_object"},
+        max_tokens=1000,
+    )
+
+    reflection = response.choices[0].message.content
+    return reflection
+
+
+def save_reflection(trade_history, reflection, df_daily):
+    """리플렉션 결과 저장"""
+    db_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "trading_history.db"
+    )
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # 리플렉션 기간 설정
+    period_start = trade_history[0]["timestamp"]
+    period_end = trade_history[-1]["timestamp"]
+
+    # 리플렉션 내용 파싱
+    sections = reflection.split("\n\n")
+    strategy_effectiveness = sections[0] if len(sections) > 0 else ""
+    key_learnings = sections[1] if len(sections) > 1 else ""
+    improvement_suggestions = sections[2] if len(sections) > 2 else ""
+
+    # 시장 상황 분석
+    market_condition = analyze_market_condition(df_daily)
+
+    cursor.execute(
+        """
+        INSERT INTO trade_reflections (
+            timestamp,
+            period_start,
+            period_end,
+            total_trades,
+            profit_loss_percentage,
+            market_condition,
+            strategy_effectiveness,
+            key_learnings,
+            improvement_suggestions
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """,
+        (
+            datetime.now().isoformat(),
+            period_start,
+            period_end,
+            len(trade_history),
+            calculate_trade_performance(trade_history)[0],
+            json.dumps(market_condition),
+            strategy_effectiveness,
+            key_learnings,
+            improvement_suggestions,
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def get_latest_reflections(days=30):
+    """최근 리플렉션 조회"""
+    db_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "trading_history.db"
+    )
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT * FROM trade_reflections
+        WHERE timestamp >= datetime('now', '-' || ? || ' days')
+        ORDER BY timestamp DESC
+    """,
+        (days,),
+    )
+
+    reflections = cursor.fetchall()
+    conn.close()
+
+    return [dict(reflection) for reflection in reflections]
+
+
+def incorporate_reflection_into_decision(client, reflection_history, current_analysis):
+    """과거 리플렉션을 고려한 거래 결정"""
+
+    format_example = {"decision": "buy/sell/hold", "percentage": 0, "reason": "string"}
+
+    response = client.chat.completions.create(
+        model="gpt-4o-2024-08-06",
+        messages=[
+            {
+                "role": "system",
+                "content": """당신은 과거의 실수로부터 학습하는 AI 트레이딩 시스템입니다.
+                과거 리플렉션과 현재 시장 상황을 종합적으로 고려하여 더 나은 거래 결정을 내려야 합니다.
+                응답은 반드시 JSON 형식이어야 합니다.""",
+            },
+            {
+                "role": "user",
+                "content": f"""
+                과거 리플렉션 기록:
+                {json.dumps(reflection_history, indent=2)}
+
+                현재 분석:
+                {json.dumps(current_analysis, indent=2)}
+
+                과거의 실수와 학습을 고려하여, 현재 거래 결정을 조정해주세요.
+                결정은 다음 형식이어야 합니다:
+                {json.dumps(format_example, indent=2)}
+                """,
+            },
+        ],
+        response_format={"type": "json_object"},
+    )
+
+    return json.loads(response.choices[0].message.content)
+
+
+def perform_periodic_reflection(client, df_daily):
+    """주기적인 거래 반성 및 시스템 개선"""
+    # 최근 거래 기록 조회
+    trade_history = get_trade_history(days=7)
+    if not trade_history:
+        logger.info("리플렉션을 위한 충분한 거래 기록이 없습니다.")
+        return
+
+    # 시장 상황 분석
+    market_condition = analyze_market_condition(df_daily)
+
+    # 리플렉션 생성
+    reflection = generate_reflection(client, trade_history, market_condition)
+
+    # 리플렉션 저장
+    save_reflection(trade_history, reflection, df_daily=df_daily)
+
+    logger.info("리플렉션이 완료되었습니다.")
+    logger.info(f"리플렉션 내용: {reflection}")
+
+
 def ai_trading():
     TICKER = "KRW-BTC"
 
     # 데이터베이스 초기화
     init_database()
+    init_reflection_database()
 
     try:
         # Upbit 객체 생성
@@ -438,116 +692,126 @@ def ai_trading():
             if driver:
                 driver.quit()
 
+        # 최근 리플렉션 기록 조회
+        reflection_history = get_latest_reflections(days=30)
+
         # AI 분석
         client = OpenAI()
-        response = client.chat.completions.create(
-            model="gpt-4o-2024-08-06",
-            messages=[
-                {
-                    "role": "system",
-                    "content": f"""You are a Bitcoin investment expert. Analyze the current market situation based on the following legendary Korean investor's trading strategy as your foundational approach:
+    #     response = client.chat.completions.create(
+    #         model="gpt-4o-2024-08-06",
+    #         messages=[
+    #             {
+    #                 "role": "system",
+    #                 "content": f"""You are a Bitcoin investment expert. Analyze the current market situation based on the following legendary Korean investor's trading strategy as your foundational approach:
 
-    [Core Trading Principles]
-    {youtube_transcript}
+    # [Core Trading Principles]
+    # {youtube_transcript}
 
-    Using the above trading methodology as your foundation, analyze the following data comprehensively to make a buy/sell/hold decision:
-    - Technical indicators and market data
-    - Recent news headlines and their potential impact on Bitcoin price
-    - The Fear and Greed Index and its implications
-    - Overall market sentiment
-    - Patterns and trends visible in the chart image
+    # Using the above trading methodology as your foundation, analyze the following data comprehensively to make a buy/sell/hold decision:
+    # - Technical indicators and market data
+    # - Recent news headlines and their potential impact on Bitcoin price
+    # - The Fear and Greed Index and its implications
+    # - Overall market sentiment
+    # - Patterns and trends visible in the chart image
 
-    Your response should include:
-    1. A decision (buy, sell, or hold)
-    2. For buy decisions: percentage (1-100) of available KRW to use
-    For sell decisions: percentage (1-100) of held BTC to sell
-    For hold decisions: exactly 0
-    3. Reasoning for your decision (explain in relation to the legendary investor's trading principles)
+    # Your response should include:
+    # 1. A decision (buy, sell, or hold)
+    # 2. For buy decisions: percentage (1-100) of available KRW to use
+    # For sell decisions: percentage (1-100) of held BTC to sell
+    # For hold decisions: exactly 0
+    # 3. Reasoning for your decision (explain in relation to the legendary investor's trading principles)
 
-    The percentage must be an integer between 1-100 for buy/sell decisions, and exactly 0 for hold decisions.
-    Your percentage should reflect the strength of your conviction based on the analyzed data and alignment with the core trading principles.""",
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"""Current Balance Status:
-    - KRW Balance: {status['krw_balance']}
-    - BTC Balance: {status['btc_balance']}
-    - Average Buy Price: {status['avg_buy_price']}
-    - Current Price: {status['current_price']}
+    # The percentage must be an integer between 1-100 for buy/sell decisions, and exactly 0 for hold decisions.
+    # Your percentage should reflect the strength of your conviction based on the analyzed data and alignment with the core trading principles.""",
+    #             },
+    #             {
+    #                 "role": "user",
+    #                 "content": [
+    #                     {
+    #                         "type": "text",
+    #                         "text": f"""Current Balance Status:
+    # - KRW Balance: {status['krw_balance']}
+    # - BTC Balance: {status['btc_balance']}
+    # - Average Buy Price: {status['avg_buy_price']}
+    # - Current Price: {status['current_price']}
 
-    Technical Analysis Data:
-    - Daily Chart: {df_daily.to_json()}
-    - Hourly Chart: {df_hourly.to_json()}
-    - Order Book: {json.dumps(orderbook)}
-    - News Headlines: {json.dumps(news_headlines)}
-    - Fear and Greed Index: {json.dumps(fear_greed_index)}""",
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/png;base64,{chart_image}"
-                            },
-                        },
-                    ],
-                },
-            ],
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "trading_decision",
-                    "strict": True,
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "decision": {
-                                "type": "string",
-                                "enum": ["buy", "sell", "hold"],
-                            },
-                            "percentage": {"type": "integer"},
-                            "reason": {"type": "string"},
-                        },
-                        "required": ["decision", "percentage", "reason"],
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            max_tokens=4095,
+    # Technical Analysis Data:
+    # - Daily Chart: {df_daily.to_json()}
+    # - Hourly Chart: {df_hourly.to_json()}
+    # - Order Book: {json.dumps(orderbook)}
+    # - News Headlines: {json.dumps(news_headlines)}
+    # - Fear and Greed Index: {json.dumps(fear_greed_index)}""",
+    #                     },
+    #                     {
+    #                         "type": "image_url",
+    #                         "image_url": {
+    #                             "url": f"data:image/png;base64,{chart_image}"
+    #                         },
+    #                     },
+    #                 ],
+    #             },
+    #         ],
+    #         response_format={
+    #             "type": "json_schema",
+    #             "json_schema": {
+    #                 "name": "trading_decision",
+    #                 "strict": True,
+    #                 "schema": {
+    #                     "type": "object",
+    #                     "properties": {
+    #                         "decision": {
+    #                             "type": "string",
+    #                             "enum": ["buy", "sell", "hold"],
+    #                         },
+    #                         "percentage": {"type": "integer"},
+    #                         "reason": {"type": "string"},
+    #                     },
+    #                     "required": ["decision", "percentage", "reason"],
+    #                     "additionalProperties": False,
+    #                 },
+    #             },
+    #         },
+    #         max_tokens=4095,
+    #     )
+    #     initial_analysis = json.loads(response.choices[0].message.content)
+        initial_analysis = {'decision': 'hold', 'percentage': 0, 'reason': "1. **Technical Indicators**: RSI is indicating overbought conditions, particularly on the hourly chart, which can be a signal of a potential reversal or consolidation. The MACD shows signs of bullish momentum but is near divergence, suggesting caution.\n\n2. **Market Data & Order Book**: There's a strong bid size compared to the ask size, showing buying interest, but the current price is near resistance, indicating potential for short-term consolidation or pullback.\n\n3. **News & Sentiment**: Headlines are bullish, with positive developments, but 'Extreme Greed' on the Fear and Greed Index suggests market sentiment is overly optimistic, which can precede corrections.\n\n4. **Legendary Investor Strategy Alignment**: The historical trade strategy focuses on reading market sentiment through charts and current market sentiment appears overly bullish. This suggests being cautious and waiting for clearer signals.\n\n5. **Overall Recommendation**: Based on the investor's principle of aligning trades with market dynamics and sentiment, it's prudent to hold. Risk management dictates avoiding actions when indicators suggest caution."}
+
+        # 리플렉션을 고려한 최종 결정
+        final_decision = incorporate_reflection_into_decision(
+            client, reflection_history, initial_analysis
         )
 
-        # 최신 pydantic 메서드 사용
-        result = TradingDecision.model_validate_json(
-            response.choices[0].message.content
-        )
-
-        logger.info(f"AI 결정: {result.decision.upper()}")
-        logger.info(f"이유: {result.reason}")
-
+        # 거래 실행 (final_decision 기반)
         order_result = None
-        if result.decision == "buy":
-            buy_amount = status['krw_balance'] * (result.percentage / 100) * 0.9995
+        if final_decision["decision"] == "buy":
+            buy_amount = (
+                status["krw_balance"] * (final_decision["percentage"] / 100) * 0.9995
+            )
             if buy_amount > 5000:
                 order_result = execute_buy(upbit, TICKER, buy_amount)
-                
-        elif result.decision == "sell":
-            sell_amount = status['btc_balance'] * (result.percentage / 100)
-            if sell_amount * status['current_price'] > 5000:
+
+        elif final_decision["decision"] == "sell":
+            sell_amount = status["btc_balance"] * (final_decision["percentage"] / 100)
+            if sell_amount * status["current_price"] > 5000:
                 order_result = execute_sell(upbit, TICKER, sell_amount)
 
         # 거래 후 최종 상태 저장
         final_status = get_current_status(upbit, TICKER)
         if final_status:
             save_trade(
-                decision=result.decision,
-                percentage=result.percentage,
-                reason=result.reason,
-                btc_balance=final_status['btc_balance'],
-                krw_balance=final_status['krw_balance'],
-                btc_avg_buy_price=final_status['avg_buy_price'],
-                btc_krw_price=final_status['current_price']
+                decision=final_decision["decision"],
+                percentage=final_decision["percentage"],
+                reason=final_decision["reason"],
+                btc_balance=final_status["btc_balance"],
+                krw_balance=final_status["krw_balance"],
+                btc_avg_buy_price=final_status["avg_buy_price"],
+                btc_krw_price=final_status["current_price"],
             )
+
+        # 주기적인 리플렉션 수행 (매 10번째 거래마다)
+        last_trade = get_last_trade()
+        if last_trade and last_trade[0] % 10 == 0:
+            perform_periodic_reflection(client, df_daily=df_daily)
 
     except Exception as e:
         logger.error(f"트레이딩 실행 중 오류 발생: {e}")
