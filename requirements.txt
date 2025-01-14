@@ -4,3 +4,9 @@ pyupbit
 ta
 selenium
 webdriver-manager
+streamlit
+pandas
+plotly
+pillow
+youtube_transcript_api
+pillow

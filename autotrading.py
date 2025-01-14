@@ -673,7 +673,10 @@ def ai_trading():
         # 4. 외부 데이터 조회
         fear_greed_index = get_fear_and_greed_index()
         news_headlines = get_bitcoin_news()
-        youtube_transcript = get_combined_transcript("3XbtEX3jUv4")
+        # youtube_transcript = get_combined_transcript("3XbtEX3jUv4")
+
+        with open("strategy.txt", "r", encoding="utf-8") as f:
+            youtube_transcript = f.read()
 
         # 차트 캡처
         chart_image = None
@@ -697,84 +700,83 @@ def ai_trading():
 
         # AI 분석
         client = OpenAI()
-    #     response = client.chat.completions.create(
-    #         model="gpt-4o-2024-08-06",
-    #         messages=[
-    #             {
-    #                 "role": "system",
-    #                 "content": f"""You are a Bitcoin investment expert. Analyze the current market situation based on the following legendary Korean investor's trading strategy as your foundational approach:
+        response = client.chat.completions.create(
+            model="gpt-4o-2024-08-06",
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"""You are a Bitcoin investment expert. Analyze the current market situation based on the following legendary Korean investor's trading strategy as your foundational approach:
 
-    # [Core Trading Principles]
-    # {youtube_transcript}
+        [Core Trading Principles]
+        {youtube_transcript}
 
-    # Using the above trading methodology as your foundation, analyze the following data comprehensively to make a buy/sell/hold decision:
-    # - Technical indicators and market data
-    # - Recent news headlines and their potential impact on Bitcoin price
-    # - The Fear and Greed Index and its implications
-    # - Overall market sentiment
-    # - Patterns and trends visible in the chart image
+        Using the above trading methodology as your foundation, analyze the following data comprehensively to make a buy/sell/hold decision:
+        - Technical indicators and market data
+        - Recent news headlines and their potential impact on Bitcoin price
+        - The Fear and Greed Index and its implications
+        - Overall market sentiment
+        - Patterns and trends visible in the chart image
 
-    # Your response should include:
-    # 1. A decision (buy, sell, or hold)
-    # 2. For buy decisions: percentage (1-100) of available KRW to use
-    # For sell decisions: percentage (1-100) of held BTC to sell
-    # For hold decisions: exactly 0
-    # 3. Reasoning for your decision (explain in relation to the legendary investor's trading principles)
+        Your response should include:
+        1. A decision (buy, sell, or hold)
+        2. For buy decisions: percentage (1-100) of available KRW to use
+        For sell decisions: percentage (1-100) of held BTC to sell
+        For hold decisions: exactly 0
+        3. Reasoning for your decision (explain in relation to the legendary investor's trading principles)
 
-    # The percentage must be an integer between 1-100 for buy/sell decisions, and exactly 0 for hold decisions.
-    # Your percentage should reflect the strength of your conviction based on the analyzed data and alignment with the core trading principles.""",
-    #             },
-    #             {
-    #                 "role": "user",
-    #                 "content": [
-    #                     {
-    #                         "type": "text",
-    #                         "text": f"""Current Balance Status:
-    # - KRW Balance: {status['krw_balance']}
-    # - BTC Balance: {status['btc_balance']}
-    # - Average Buy Price: {status['avg_buy_price']}
-    # - Current Price: {status['current_price']}
+        The percentage must be an integer between 1-100 for buy/sell decisions, and exactly 0 for hold decisions.
+        Your percentage should reflect the strength of your conviction based on the analyzed data and alignment with the core trading principles.""",
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": f"""Current Balance Status:
+        - KRW Balance: {status['krw_balance']}
+        - BTC Balance: {status['btc_balance']}
+        - Average Buy Price: {status['avg_buy_price']}
+        - Current Price: {status['current_price']}
 
-    # Technical Analysis Data:
-    # - Daily Chart: {df_daily.to_json()}
-    # - Hourly Chart: {df_hourly.to_json()}
-    # - Order Book: {json.dumps(orderbook)}
-    # - News Headlines: {json.dumps(news_headlines)}
-    # - Fear and Greed Index: {json.dumps(fear_greed_index)}""",
-    #                     },
-    #                     {
-    #                         "type": "image_url",
-    #                         "image_url": {
-    #                             "url": f"data:image/png;base64,{chart_image}"
-    #                         },
-    #                     },
-    #                 ],
-    #             },
-    #         ],
-    #         response_format={
-    #             "type": "json_schema",
-    #             "json_schema": {
-    #                 "name": "trading_decision",
-    #                 "strict": True,
-    #                 "schema": {
-    #                     "type": "object",
-    #                     "properties": {
-    #                         "decision": {
-    #                             "type": "string",
-    #                             "enum": ["buy", "sell", "hold"],
-    #                         },
-    #                         "percentage": {"type": "integer"},
-    #                         "reason": {"type": "string"},
-    #                     },
-    #                     "required": ["decision", "percentage", "reason"],
-    #                     "additionalProperties": False,
-    #                 },
-    #             },
-    #         },
-    #         max_tokens=4095,
-    #     )
-    #     initial_analysis = json.loads(response.choices[0].message.content)
-        initial_analysis = {'decision': 'hold', 'percentage': 0, 'reason': "1. **Technical Indicators**: RSI is indicating overbought conditions, particularly on the hourly chart, which can be a signal of a potential reversal or consolidation. The MACD shows signs of bullish momentum but is near divergence, suggesting caution.\n\n2. **Market Data & Order Book**: There's a strong bid size compared to the ask size, showing buying interest, but the current price is near resistance, indicating potential for short-term consolidation or pullback.\n\n3. **News & Sentiment**: Headlines are bullish, with positive developments, but 'Extreme Greed' on the Fear and Greed Index suggests market sentiment is overly optimistic, which can precede corrections.\n\n4. **Legendary Investor Strategy Alignment**: The historical trade strategy focuses on reading market sentiment through charts and current market sentiment appears overly bullish. This suggests being cautious and waiting for clearer signals.\n\n5. **Overall Recommendation**: Based on the investor's principle of aligning trades with market dynamics and sentiment, it's prudent to hold. Risk management dictates avoiding actions when indicators suggest caution."}
+        Technical Analysis Data:
+        - Daily Chart: {df_daily.to_json()}
+        - Hourly Chart: {df_hourly.to_json()}
+        - Order Book: {json.dumps(orderbook)}
+        - News Headlines: {json.dumps(news_headlines)}
+        - Fear and Greed Index: {json.dumps(fear_greed_index)}""",
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{chart_image}"
+                                },
+                            },
+                        ],
+                    },
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "trading_decision",
+                        "strict": True,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "decision": {
+                                    "type": "string",
+                                    "enum": ["buy", "sell", "hold"],
+                                },
+                                "percentage": {"type": "integer"},
+                                "reason": {"type": "string"},
+                            },
+                            "required": ["decision", "percentage", "reason"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                max_tokens=4095,
+            )
+        initial_analysis = json.loads(response.choices[0].message.content)
 
         # 리플렉션을 고려한 최종 결정
         final_decision = incorporate_reflection_into_decision(
