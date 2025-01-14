@@ -11,22 +11,24 @@ import requests
 import base64
 from PIL import Image
 import io
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import (
-    TimeoutException,
-    ElementClickInterceptedException,
-    WebDriverException,
-    NoSuchElementException,
-)
+
+# from selenium import webdriver
+# from selenium.webdriver.chrome.service import Service
+# from selenium.webdriver.chrome.options import Options
+# from selenium.webdriver.common.by import By
+# from selenium.webdriver.support.ui import WebDriverWait
+# from selenium.webdriver.support import expected_conditions as EC
+# from webdriver_manager.chrome import ChromeDriverManager
+# from selenium.common.exceptions import (
+#     TimeoutException,
+#     ElementClickInterceptedException,
+#     WebDriverException,
+#     NoSuchElementException,
+# )
 import logging
 from datetime import datetime
-from youtube_transcript_api import YouTubeTranscriptApi
+
+# from youtube_transcript_api import YouTubeTranscriptApi
 from pydantic import BaseModel
 from openai import OpenAI
 import sqlite3
@@ -216,126 +218,126 @@ def get_bitcoin_news():
         return []
 
 
-def setup_chrome_options():
-    chrome_options = Options()
-    chrome_options.add_argument("--start-maximized")
-    chrome_options.add_argument("--headless")  # 디버깅을 위해 헤드리스 모드 비활성화
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
-    return chrome_options
+# def setup_chrome_options():
+#     chrome_options = Options()
+#     chrome_options.add_argument("--start-maximized")
+#     chrome_options.add_argument("--headless")  # 디버깅을 위해 헤드리스 모드 비활성화
+#     chrome_options.add_argument("--disable-gpu")
+#     chrome_options.add_argument("--no-sandbox")
+#     chrome_options.add_argument("--disable-dev-shm-usage")
+#     chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
+#     return chrome_options
 
 
-def create_driver():
-    logger.info("ChromeDriver 설정 중...")
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=setup_chrome_options())
-    return driver
+# def create_driver():
+#     logger.info("ChromeDriver 설정 중...")
+#     service = Service(ChromeDriverManager().install())
+#     driver = webdriver.Chrome(service=service, options=setup_chrome_options())
+#     return driver
 
 
-def click_element_by_xpath(driver, xpath, element_name, wait_time=10):
-    try:
-        element = WebDriverWait(driver, wait_time).until(
-            EC.presence_of_element_located((By.XPATH, xpath))
-        )
-        # 요소가 뷰포트에 보일 때까지 스크롤
-        driver.execute_script("arguments[0].scrollIntoView(true);", element)
-        # 요소가 클릭 가능할 때까지 대기
-        element = WebDriverWait(driver, wait_time).until(
-            EC.element_to_be_clickable((By.XPATH, xpath))
-        )
-        element.click()
-        logger.info(f"{element_name} 클릭 완료")
-        time.sleep(2)  # 클릭 후 잠시 대기
-    except TimeoutException:
-        logger.error(f"{element_name} 요소를 찾는 데 시간이 초과되었습니다.")
-    except ElementClickInterceptedException:
-        logger.error(
-            f"{element_name} 요소를 클릭할 수 없습니다. 다른 요소에 가려져 있을 수 있습니다."
-        )
-    except NoSuchElementException:
-        logger.error(f"{element_name} 요소를 찾을 수 없습니다.")
-    except Exception as e:
-        logger.error(f"{element_name} 클릭 중 오류 발생: {e}")
+# def click_element_by_xpath(driver, xpath, element_name, wait_time=10):
+#     try:
+#         element = WebDriverWait(driver, wait_time).until(
+#             EC.presence_of_element_located((By.XPATH, xpath))
+#         )
+#         # 요소가 뷰포트에 보일 때까지 스크롤
+#         driver.execute_script("arguments[0].scrollIntoView(true);", element)
+#         # 요소가 클릭 가능할 때까지 대기
+#         element = WebDriverWait(driver, wait_time).until(
+#             EC.element_to_be_clickable((By.XPATH, xpath))
+#         )
+#         element.click()
+#         logger.info(f"{element_name} 클릭 완료")
+#         time.sleep(2)  # 클릭 후 잠시 대기
+#     except TimeoutException:
+#         logger.error(f"{element_name} 요소를 찾는 데 시간이 초과되었습니다.")
+#     except ElementClickInterceptedException:
+#         logger.error(
+#             f"{element_name} 요소를 클릭할 수 없습니다. 다른 요소에 가려져 있을 수 있습니다."
+#         )
+#     except NoSuchElementException:
+#         logger.error(f"{element_name} 요소를 찾을 수 없습니다.")
+#     except Exception as e:
+#         logger.error(f"{element_name} 클릭 중 오류 발생: {e}")
 
 
-def perform_chart_actions(driver):
-    # 시간 메뉴 클릭
-    click_element_by_xpath(
-        driver,
-        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]",
-        "시간 메뉴",
-    )
+# def perform_chart_actions(driver):
+#     # 시간 메뉴 클릭
+#     click_element_by_xpath(
+#         driver,
+#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]",
+#         "시간 메뉴",
+#     )
 
-    # 1시간 옵션 선택
-    click_element_by_xpath(
-        driver,
-        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]/cq-menu-dropdown/cq-item[8]",
-        "1시간 옵션",
-    )
+#     # 1시간 옵션 선택
+#     click_element_by_xpath(
+#         driver,
+#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]/cq-menu-dropdown/cq-item[8]",
+#         "1시간 옵션",
+#     )
 
-    # 지표 메뉴 클릭
-    click_element_by_xpath(
-        driver,
-        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]",
-        "지표 메뉴",
-    )
+#     # 지표 메뉴 클릭
+#     click_element_by_xpath(
+#         driver,
+#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]",
+#         "지표 메뉴",
+#     )
 
-    # 볼린저 밴드 옵션 선택
-    click_element_by_xpath(
-        driver,
-        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]/cq-menu-dropdown/cq-scroll/cq-studies/cq-studies-content/cq-item[15]",
-        "볼린저 밴드 옵션",
-    )
-
-
-def capture_and_encode_screenshot(driver):
-    try:
-        # 스크린샷 캡처
-        png = driver.get_screenshot_as_png()
-
-        # PIL Image로 변환
-        img = Image.open(io.BytesIO(png))
-
-        # 이미지 리사이즈 (OpenAI API 제한에 맞춤)
-        img.thumbnail((2000, 2000))
-
-        # 현재 시간을 파일명에 포함
-        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"upbit_chart_{current_time}.png"
-
-        # 현재 스크립트의 경로를 가져옴
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-
-        # 파일 저장 경로 설정
-        file_path = os.path.join(script_dir, filename)
-
-        # 이미지 파일로 저장
-        img.save(file_path)
-        logger.info(f"스크린샷이 저장되었습니다: {file_path}")
-
-        # 이미지를 바이트로 변환
-        buffered = io.BytesIO()
-        img.save(buffered, format="PNG")
-
-        # base64로 인코딩
-        base64_image = base64.b64encode(buffered.getvalue()).decode("utf-8")
-
-        return base64_image, file_path
-    except Exception as e:
-        logger.error(f"스크린샷 캡처 및 인코딩 중 오류 발생: {e}")
-        return None, None
+#     # 볼린저 밴드 옵션 선택
+#     click_element_by_xpath(
+#         driver,
+#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]/cq-menu-dropdown/cq-scroll/cq-studies/cq-studies-content/cq-item[15]",
+#         "볼린저 밴드 옵션",
+#     )
 
 
-def get_combined_transcript(video_id):
-    try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["ko"])
-        combined_text = " ".join(entry["text"] for entry in transcript)
-        return combined_text
-    except Exception as e:
-        logger.error(f"Error fetching YouTube transcript: {e}")
-        return ""
+# def capture_and_encode_screenshot(driver):
+#     try:
+#         # 스크린샷 캡처
+#         png = driver.get_screenshot_as_png()
+
+#         # PIL Image로 변환
+#         img = Image.open(io.BytesIO(png))
+
+#         # 이미지 리사이즈 (OpenAI API 제한에 맞춤)
+#         img.thumbnail((2000, 2000))
+
+#         # 현재 시간을 파일명에 포함
+#         current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+#         filename = f"upbit_chart_{current_time}.png"
+
+#         # 현재 스크립트의 경로를 가져옴
+#         script_dir = os.path.dirname(os.path.abspath(__file__))
+
+#         # 파일 저장 경로 설정
+#         file_path = os.path.join(script_dir, filename)
+
+#         # 이미지 파일로 저장
+#         img.save(file_path)
+#         logger.info(f"스크린샷이 저장되었습니다: {file_path}")
+
+#         # 이미지를 바이트로 변환
+#         buffered = io.BytesIO()
+#         img.save(buffered, format="PNG")
+
+#         # base64로 인코딩
+#         base64_image = base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+#         return base64_image, file_path
+#     except Exception as e:
+#         logger.error(f"스크린샷 캡처 및 인코딩 중 오류 발생: {e}")
+#         return None, None
+
+
+# def get_combined_transcript(video_id):
+#     try:
+#         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["ko"])
+#         combined_text = " ".join(entry["text"] for entry in transcript)
+#         return combined_text
+#     except Exception as e:
+#         logger.error(f"Error fetching YouTube transcript: {e}")
+#         return ""
 
 
 def execute_buy(upbit, ticker, amount):
@@ -678,22 +680,22 @@ def ai_trading():
         with open("strategy.txt", "r", encoding="utf-8") as f:
             youtube_transcript = f.read()
 
-        # 차트 캡처
-        chart_image = None
-        saved_file_path = None
-        driver = None
-        try:
-            driver = create_driver()
-            driver.get("https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC")
-            logger.info("차트 페이지 로딩 완료")
-            time.sleep(30)
-            perform_chart_actions(driver)
-            chart_image, saved_file_path = capture_and_encode_screenshot(driver)
-        except Exception as e:
-            logger.error(f"차트 캡처 실패: {e}")
-        finally:
-            if driver:
-                driver.quit()
+        # # 차트 캡처
+        # chart_image = None
+        # saved_file_path = None
+        # driver = None
+        # try:
+        #     driver = create_driver()
+        #     driver.get("https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC")
+        #     logger.info("차트 페이지 로딩 완료")
+        #     time.sleep(30)
+        #     perform_chart_actions(driver)
+        #     chart_image, saved_file_path = capture_and_encode_screenshot(driver)
+        # except Exception as e:
+        #     logger.error(f"차트 캡처 실패: {e}")
+        # finally:
+        #     if driver:
+        #         driver.quit()
 
         # 최근 리플렉션 기록 조회
         reflection_history = get_latest_reflections(days=30)
@@ -726,13 +728,13 @@ def ai_trading():
 
         The percentage must be an integer between 1-100 for buy/sell decisions, and exactly 0 for hold decisions.
         Your percentage should reflect the strength of your conviction based on the analyzed data and alignment with the core trading principles.""",
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": f"""Current Balance Status:
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"""Current Balance Status:
         - KRW Balance: {status['krw_balance']}
         - BTC Balance: {status['btc_balance']}
         - Average Buy Price: {status['avg_buy_price']}
@@ -744,38 +746,32 @@ def ai_trading():
         - Order Book: {json.dumps(orderbook)}
         - News Headlines: {json.dumps(news_headlines)}
         - Fear and Greed Index: {json.dumps(fear_greed_index)}""",
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{chart_image}"
-                                },
-                            },
-                        ],
-                    },
-                ],
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "trading_decision",
-                        "strict": True,
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "decision": {
-                                    "type": "string",
-                                    "enum": ["buy", "sell", "hold"],
-                                },
-                                "percentage": {"type": "integer"},
-                                "reason": {"type": "string"},
-                            },
-                            "required": ["decision", "percentage", "reason"],
-                            "additionalProperties": False,
                         },
+                    ],
+                },
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "trading_decision",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "decision": {
+                                "type": "string",
+                                "enum": ["buy", "sell", "hold"],
+                            },
+                            "percentage": {"type": "integer"},
+                            "reason": {"type": "string"},
+                        },
+                        "required": ["decision", "percentage", "reason"],
+                        "additionalProperties": False,
                     },
                 },
-                max_tokens=4095,
-            )
+            },
+            max_tokens=4095,
+        )
         initial_analysis = json.loads(response.choices[0].message.content)
 
         # 리플렉션을 고려한 최종 결정
