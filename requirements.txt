@@ -10,3 +10,5 @@ plotly
 pillow
 youtube_transcript_api
 pillow
+schedule
+tiktoken
