@@ -4,6 +4,7 @@ import requests
 import logging
 import time
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 import pandas as pd
 import ta
 from ta.utils import dropna
@@ -12,7 +13,6 @@ from openai import OpenAI
 import pyupbit
 import sqlite3
 import schedule
-
 import tiktoken
 
 
@@ -586,6 +586,8 @@ def main():
     )
     global logger
     logger = logging.getLogger(__name__)
+
+    load_dotenv()
 
     try:
         # 데이터베이스 초기화
