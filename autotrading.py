@@ -121,13 +121,9 @@ def log_trade(
     conn.commit()
 
 
-def get_recent_trades(conn, days=7):
+def get_recent_trades(conn, limit=24):
     c = conn.cursor()
-    seven_days_ago = (datetime.now() - timedelta(days=days)).isoformat()
-    c.execute(
-        "SELECT * FROM trades WHERE timestamp > ? ORDER BY timestamp DESC",
-        (seven_days_ago,),
-    )
+    c.execute("SELECT * FROM trades ORDER BY timestamp DESC LIMIT ?", (limit,))
     columns = [column[0] for column in c.description]
 
     return pd.DataFrame.from_records(data=c.fetchall(), columns=columns)
@@ -217,6 +213,7 @@ def calculate_performance(trades_df):
     if trades_df.empty:
         return 0
 
+    # Get the oldest and most recent trade data
     initial_balance = (
         trades_df.iloc[-1]["krw_balance"]
         + trades_df.iloc[-1]["btc_balance"] * trades_df.iloc[-1]["btc_krw_price"]
@@ -242,21 +239,21 @@ def generate_reflection(trades_df, current_market_data):
         {
             "role": "user",
             "content": f"""
-                Recent trading data:
+                Last 24 trades data:
                 {trades_df.to_json(orient='records')}
                 
                 Current market data:
                 {current_market_data}
                 
-                Overall performance in the last 7 days: {performance:.2f}%
+                Overall performance: {performance:.2f}%
                 
                 Please analyze this data and provide:
-                1. A brief reflection on the recent trading decisions
-                2. Insights on what worked well and what didn't
-                3. Suggestions for improvement in future trading decisions
-                4. Any patterns or trends you notice in the market data
+                1. A brief reflection on the recent 24 trading decisions
+                2. Patterns in successful and unsuccessful trades
+                3. Key market conditions that influenced these trades
+                4. Specific suggestions for improvement in future trading decisions
                 
-                Limit your response to 250 words or less.
+                Limit your response to 250 words or less, focusing on actionable insights.
                 """,
         },
     ]
@@ -273,22 +270,22 @@ def generate_reflection(trades_df, current_market_data):
             {
                 "role": "user",
                 "content": f"""
-                Recent trading data:
-                {trades_df.to_json(orient='records')}
-                
-                Current market data:
-                {current_market_data}
-                
-                Overall performance in the last 7 days: {performance:.2f}%
-                
-                Please analyze this data and provide:
-                1. A brief reflection on the recent trading decisions
-                2. Insights on what worked well and what didn't
-                3. Suggestions for improvement in future trading decisions
-                4. Any patterns or trends you notice in the market data
-                
-                Limit your response to 250 words or less.
-                """,
+                    Last 24 trades data:
+                    {trades_df.to_json(orient='records')}
+                    
+                    Current market data:
+                    {current_market_data}
+                    
+                    Overall performance: {performance:.2f}%
+                    
+                    Please analyze this data and provide:
+                    1. A brief reflection on the recent 24 trading decisions
+                    2. Patterns in successful and unsuccessful trades
+                    3. Key market conditions that influenced these trades
+                    4. Specific suggestions for improvement in future trading decisions
+                    
+                    Limit your response to 250 words or less, focusing on actionable insights.
+                    """,
             },
         ],
     )
@@ -309,6 +306,39 @@ def run_scheduled_trading():
     except Exception as e:
         logger.error(f"Error during trading execution: {str(e)}")
         logger.exception("상세 에러:")
+
+
+def get_simplified_market_data(df_daily, df_hourly):
+    """
+    OHLCV 데이터만 포함한 단순화된 시장 데이터 생성
+    - daily_ohlcv: 하루 전 데이터만 포함
+    - hourly_ohlcv: 최근 24시간 데이터만 포함
+    """
+    # 하루 전 일봉 데이터 (마지막 2개 데이터를 가져와서 이전 데이터 사용)
+    daily_data = df_daily.tail(2).iloc[0]
+    daily_ohlcv = {
+        "open": float(daily_data["open"]),
+        "high": float(daily_data["high"]),
+        "low": float(daily_data["low"]),
+        "close": float(daily_data["close"]),
+        "volume": float(daily_data["volume"]),
+    }
+
+    # 최근 24시간 시간봉 데이터
+    hourly_data = df_hourly.tail(24)
+    hourly_ohlcv = [
+        {
+            "datetime": str(idx),
+            "open": float(row["open"]),
+            "high": float(row["high"]),
+            "low": float(row["low"]),
+            "close": float(row["close"]),
+            "volume": float(row["volume"]),
+        }
+        for idx, row in hourly_data.iterrows()
+    ]
+
+    return {"daily_ohlcv": daily_ohlcv, "hourly_ohlcv": hourly_ohlcv}
 
 
 def ai_trading():
@@ -349,13 +379,7 @@ def ai_trading():
     recent_trades = get_recent_trades(conn)
 
     # 현재 시장 데이터 수집
-    current_market_data = {
-        "fear_greed_index": fear_greed_index,
-        "news_headlines": news_headlines,
-        "orderbook": orderbook,
-        "daily_ohlcv": df_daily.to_dict(),
-        "hourly_ohlcv": df_hourly.to_dict(),
-    }
+    current_market_data = get_simplified_market_data(df_daily, df_hourly)
 
     # AI 분석 시작
     client = OpenAI()
