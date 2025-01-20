@@ -64,20 +64,68 @@ with tab1:
     st.plotly_chart(fig_price, use_container_width=True)
 
 with tab2:
+    # BTC의 KRW 가치 계산
+    df['btc_value_in_krw'] = df['btc_balance'] * df['btc_krw_price']
+    # 총 KRW 가치 계산
+    df['total_value_in_krw'] = df['btc_value_in_krw'] + df['krw_balance']
+    
     # 잔고 변화 차트
     fig_balance = go.Figure()
+    
+    # BTC 잔고
     fig_balance.add_trace(
-        go.Scatter(x=df["timestamp"], y=df["btc_balance"], name="BTC Balance")
+        go.Scatter(x=df["timestamp"], y=df["btc_balance"], name="BTC Balance", yaxis="y")
     )
+    
+    # KRW 잔고
     fig_balance.add_trace(
         go.Scatter(
             x=df["timestamp"], y=df["krw_balance"], name="KRW Balance", yaxis="y2"
         )
     )
+    
+    # 총 KRW 가치
+    fig_balance.add_trace(
+        go.Scatter(
+            x=df["timestamp"], 
+            y=df["total_value_in_krw"], 
+            name="Total Value (KRW)", 
+            yaxis="y3",
+            line=dict(color='green')
+        )
+    )
+    
+    # 레이아웃 업데이트
     fig_balance.update_layout(
         title="Balance History",
-        yaxis=dict(title="BTC Balance"),
-        yaxis2=dict(title="KRW Balance", overlaying="y", side="right"),
+        yaxis=dict(
+            title="BTC Balance",
+            titlefont=dict(color="#1f77b4"),
+            tickfont=dict(color="#1f77b4")
+        ),
+        yaxis2=dict(
+            title="KRW Balance",
+            overlaying="y",
+            side="right",
+            titlefont=dict(color="#ff7f0e"),
+            tickfont=dict(color="#ff7f0e")
+        ),
+        yaxis3=dict(
+            title="Total Value (KRW)",
+            overlaying="y",
+            side="right",
+            position=0.85,
+            titlefont=dict(color="green"),
+            tickfont=dict(color="green")
+        ),
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
     )
     st.plotly_chart(fig_balance, use_container_width=True)
 
